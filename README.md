@@ -64,28 +64,28 @@ end
 ...
 ```
 
-The 'work blick' and 'base block' are executed in a worker's instance scope, in a same thread, so that they can share object with the worker's instance variable.
+The 'work block' and 'base block' are executed in a worker's instance scope, in a same thread, so that they can share object with the worker's instance variable.
 
 ### WorkerPool
 You can exec work block in some process concurrently.
 
 ```ruby
 #define a pool of 8 workers , executed in other process.
-pw = ConcurrentWorker::WorkerPool.new(type: :process, pool_max: 8) do
+wp = ConcurrentWorker::WorkerPool.new(type: :process, pool_max: 8) do
   |n|
   [n , n.times.inject(:+)]
 end
 
 # you can receive the result of work block with callback block.
-pw.add_callback do |n, result|
+wp.add_callback do |n, result|
   logger.log( "n=%d,result=%d", n, result)
 end
 
 (10000000..10000200).each do |n|
-  pw.req(n)
+  wp.req(n)
 end
 
-pw.join
+wp.join
 
 ```
 
