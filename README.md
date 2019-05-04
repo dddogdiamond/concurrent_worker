@@ -1,10 +1,10 @@
 # ConcurrentWorker
 
-
+Concurrent worker in thread/process with preparation structure.
 
 ## Installation
 
-Add this line to your application's Gemfile:
+Add this line to your application's Gemfile.
 
 ```ruby
 gem 'concurrent_worker'
@@ -42,37 +42,36 @@ logger.req("thread%d n=%d\n",0, 1)
 logger.join
 ```
 
-If you need some preparation for the worker block, you can define 'base block':
+If you need some preparation for the worker block, you can define 'base block'.
 
 ```ruby
 logger = ConcurrentWorker::Worker.new do |args|
-  # share object with 'base block' by instance variable(@xxx). 
+  # worker block and base block can share object with instance variable(@xxx).
   printf(@file, *args)
   @file.flush
   nil
 end
 
-# define 'base block' for some preparation of 'work block'.
+# define base block for some preparation of work block.
 logger.set_block(:base_block) do
   open( "log.txt" , "w" ) do |file|
     @file = file
-    # 'yield_loop_block' must be called in 'base block'.
-    # 'work block' will be called in this call.
+    # 'yield_loop_block' must be called in base block.
+    # work block will be called in this call.
     yield_loop_block 
   end
 end
 ...
 ```
 
-The 'work block' and 'base block' are executed in a worker's instance scope, in a same thread, so that they can share object with the worker's instance variable.
+The work block and base block are executed in a same thread, and in a worker's instance scope so that they can share object with the worker's instance variable.
 
 ### WorkerPool
 You can exec work block in some process concurrently.
 
 ```ruby
 #define a pool of 8 workers , executed in other process.
-wp = ConcurrentWorker::WorkerPool.new(type: :process, pool_max: 8) do
-  |n|
+wp = ConcurrentWorker::WorkerPool.new(type: :process, pool_max: 8) do |n|
   [n , n.times.inject(:+)]
 end
 
@@ -86,7 +85,6 @@ end
 end
 
 wp.join
-
 ```
 
 Worker uses `Marshal::dump/load` to transport ruby object to other process. So, request arguments and result objects must be able to be Marshal dumped. 
