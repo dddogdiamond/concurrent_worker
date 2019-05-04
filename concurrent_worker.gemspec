@@ -6,11 +6,11 @@ require "concurrent_worker/version"
 Gem::Specification.new do |spec|
   spec.name          = "concurrent_worker"
   spec.version       = ConcurrentWorker::VERSION
-  spec.authors       = ["mur"]
-  spec.email         = ["mur@mur.jp"]
+  spec.authors       = ["dddogdiamond"]
+  spec.email         = ["dddogdiamond@gmail.com"]
 
   spec.summary       = %q{Concurrent worker in thread/process with preparation structure.}
-  spec.description   = %q{I will write later...}
+  spec.description   = %q{Concurrent worker in thread/process with preparation structure.}
   spec.homepage      = "https://github.com/dddogdiamond/concurrent_worker"
   spec.license       = "MIT"
 
