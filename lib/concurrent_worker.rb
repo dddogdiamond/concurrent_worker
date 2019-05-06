@@ -297,7 +297,6 @@ module ConcurrentWorker
         loop do
           break if (req = @req_queue.pop).empty?
           if need_new_worker?
-            puts "new worker".light_yellow
             w = deploy_worker
             w.req_queue_max.times do
               @ready_queue.push(w)
