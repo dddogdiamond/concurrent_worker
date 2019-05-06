@@ -1,5 +1,4 @@
 require "concurrent_worker/version"
-require 'colorize'
 
 module ConcurrentWorker
   class Error < StandardError; end
@@ -28,10 +27,10 @@ module ConcurrentWorker
       @result_callbacks = []
       @retired_callbacks = []
 
-      @req_queue_max = @options[ :req_queue_max ] || 2
+      @req_queue_max = @options[:req_queue_max] || 2
       @req_queue = SizedQueue.new(@req_queue_max)
       
-      if @options[ :type ] == :process
+      if @options[:type] == :process
         Worker.include ConcurrentProcess
       else
         Worker.include ConcurrentThread
@@ -240,7 +239,7 @@ module ConcurrentWorker
         @req_queue.push(args)
         @ipc_channel.send(args)
         true
-      rescue ClosedQueueError
+      rescue ClosedQueueError, IOError
         false
       end
     end
@@ -273,7 +272,7 @@ module ConcurrentWorker
       @args = args
       
       @options = options
-      @max_num = @options[ :pool_max ] || 8
+      @max_num = @options[:pool_max] || 8
       @set_blocks = []
       if work_block
         @set_blocks.push([:work_block, work_block])
@@ -292,35 +291,48 @@ module ConcurrentWorker
           end
         end
       end
-    end
-    
-    def push( arg )
-      @array_mutex.synchronize do
-        super( arg )
+
+      @req_queue = SizedQueue.new(@max_num * 2)
+      @req_thread = Thread.new do
+        loop do
+          break if (req = @req_queue.pop).empty?
+          if need_new_worker?
+            puts "new worker".light_yellow
+            w = deploy_worker
+            w.req_queue_max.times do
+              @ready_queue.push(w)
+            end
+          end
+          while !@ready_queue.pop.req(*req[0], &req[1])
+          end
+        end
       end
     end
     
+    def delete(arg)
+      @array_mutex.synchronize do
+        super(arg)
+      end
+    end
+    def push(arg)
+      @array_mutex.synchronize do
+        super(arg)
+      end
+    end
     def shift
       @array_mutex.synchronize do
         super
       end
     end
-    
-    def size
-      @array_mutex.synchronize do
-        super
-      end
-    end
-    
-    def n_available
-      @array_mutex.synchronize do
-        super
-      end
-    end
-    
     def empty?
       @array_mutex.synchronize do
         super
+      end
+    end
+    
+    def need_new_worker?
+      @array_mutex.synchronize do
+        self.size < @max_num && self.select{ |w| w.req_queue.size == 0 }.empty?
       end
     end
     
@@ -329,6 +341,11 @@ module ConcurrentWorker
       @result_callbacks.push(callback)
     end
 
+    def add_finished_callback(&callback)
+      raise "block is nil" unless callback
+      @finished_callbacks.push(callback)
+    end
+    
 
     def deploy_worker
       w = Worker.new(*@args, type: @options[:type], &@work_block)
@@ -337,29 +354,19 @@ module ConcurrentWorker
         @ready_queue.push(w)
       end
 
-      if @options[:respawn]
-        w.add_retired_callback do
-          undone_reqs = []
-          while req = w.req_queue.pop
-            next if req == []
-            undone_reqs.push req
-          end
-          
-          unless undone_reqs.empty?
-            new_w = deploy_worker
-            undone_reqs.each do |req|
-              new_w.req( *req[0], &req[1] )
-            end
-            self.delete w
-          end
+      w.add_retired_callback do
+        while req = w.req_queue.pop
+          next if req == []
+          @req_queue.push(req)
         end
+        self.delete(w)
       end
       
       @set_blocks.each do |symbol, block|
         w.set_block(symbol, &block)
       end
       w.run
-      self.push w
+      self.push(w)
       w
     end
 
@@ -368,15 +375,7 @@ module ConcurrentWorker
     end
     
     def req(*args, &work_block)
-      if self.size < @max_num && select{ |w| w.req_queue.size == 0 }.empty?
-        w = deploy_worker
-        w.req_queue_max.times do
-          @ready_queue.push(w)
-        end
-      end
-      
-      while !@ready_queue.pop.req(*args, &work_block)
-      end
+      @req_queue.push([args, work_block])
     end
 
     def join
@@ -385,6 +384,8 @@ module ConcurrentWorker
       puts size
       @callback_queue.push([])
       @callback_thread.join
+      @req_queue.push([])
+      @req_thread.join
     end
   end
 
