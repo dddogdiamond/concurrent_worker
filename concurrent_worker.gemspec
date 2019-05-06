@@ -9,8 +9,8 @@ Gem::Specification.new do |spec|
   spec.authors       = ["dddogdiamond"]
   spec.email         = ["dddogdiamond@gmail.com"]
 
-  spec.summary       = %q{Concurrent worker in thread/process with preparation structure.}
-  spec.description   = %q{Concurrent worker in thread/process with preparation structure.}
+  spec.summary       = %q{Concurrent worker in thread/process with preparation mechanism.}
+  spec.description   = %q{Concurrent worker in thread/process with preparation mechanism.}
   spec.homepage      = "https://github.com/dddogdiamond/concurrent_worker"
   spec.license       = "MIT"
 

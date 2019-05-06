@@ -1,4 +1,5 @@
 require "concurrent_worker/version"
+require 'colorize'
 
 module ConcurrentWorker
   class Error < StandardError; end
@@ -9,7 +10,7 @@ module ConcurrentWorker
     # Worker               : worker class
     #  +cncr_block         : concurrent processing block : thread(as ConcurrentThread)/process(as ConcurrentProcess)
     #    +base_block       : user defined preparation to exec 'work block'
-    #      +loop_block     : loop of receiving request and exec 'looped block'
+    #      +loop_block     : loop of receiving request and exec 'work block'
     #        +work_block   : user requested work
     #
     # These blocks are executed with 'instance_exec' method of worker,
@@ -24,7 +25,8 @@ module ConcurrentWorker
       set_block(:work_block, &work_block) if work_block
       
       @state = :idle
-      @callbacks = []
+      @result_callbacks = []
+      @retired_callbacks = []
 
       @req_queue_max = @options[ :req_queue_max ] || 2
       @req_queue = SizedQueue.new(@req_queue_max)
@@ -35,15 +37,26 @@ module ConcurrentWorker
         Worker.include ConcurrentThread
       end
     end
-    
+
     def add_callback(&callback)
       raise "block is nil" unless callback
-      @callbacks.push(callback)
+      @result_callbacks.push(callback)
     end
     
-    def call_callbacks(args)
-      @callbacks.each do |callback|
+    def call_result_callbacks(args)
+      @result_callbacks.each do |callback|
         callback.call(args)
+      end
+    end
+    
+    def add_retired_callback(&callback)
+      raise "block is nil" unless callback
+      @retired_callbacks.push(callback)
+    end
+    
+    def call_retired_callbacks
+      @retired_callbacks.each do |callback|
+        callback.call
       end
     end
     
@@ -90,6 +103,7 @@ module ConcurrentWorker
           yield_loop_block
         end
       end
+      
       cncr_block
     end
 
@@ -116,13 +130,24 @@ module ConcurrentWorker
     def cncr_block
       @thread_channel = Queue.new
       @thread =  Thread.new do
-        yield_base_block
+        begin
+          yield_base_block
+        ensure
+          @req_queue.close
+          @thread_channel.close
+          call_retired_callbacks
+        end
       end
     end
     
     def send_req(args)
-      @req_queue.push(args)
-      @thread_channel.push(args)
+      begin
+        @req_queue.push(args)
+        @thread_channel.push(args)
+        true
+      rescue ClosedQueueError
+        false
+      end
     end
     
     def receive_req
@@ -130,7 +155,7 @@ module ConcurrentWorker
     end
 
     def send_res(args)
-      call_callbacks(args)
+      call_result_callbacks(args)
       @req_queue.pop
     end
 
@@ -164,7 +189,9 @@ module ConcurrentWorker
       end
 
       def recv
-        size = @rio.read(4).unpack("I")[0]
+        szdata = @rio.read(4)
+        return [] if szdata.nil?
+        size = szdata.unpack("I")[0]
         Marshal.load(@rio.read(size))
       end
       
@@ -178,25 +205,44 @@ module ConcurrentWorker
       @ipc_channel = IPCDuplexChannel.new
       @c_pid = fork do
         @ipc_channel.choose_io
-        yield_base_block
-        @ipc_channel.send(:worker_loop_finished)
+        begin
+          yield_base_block
+        rescue
+          @ipc_channel.send($!)
+        ensure
+          @ipc_channel.send(:worker_loop_finished)
+          @ipc_channel.close
+        end
       end
       @ipc_channel.choose_io
 
       @thread = Thread.new do
-        loop do
-          result = @ipc_channel.recv
-          break if result == :worker_loop_finished
-          call_callbacks(result)
-          @req_queue.pop
+        begin
+          loop do
+            result = @ipc_channel.recv
+            break if result == :worker_loop_finished
+            raise result if result.kind_of?(Exception)
+
+            call_result_callbacks(result)
+            @req_queue.pop
+          end
+        ensure
+          @ipc_channel.close
+          @req_queue.close
+          call_retired_callbacks
         end
       end
     end
 
     def send_req(args)
-      #called from main process only
-      @req_queue.push(args)
-      @ipc_channel.send(args)
+      begin 
+        #called from main process only
+        @req_queue.push(args)
+        @ipc_channel.send(args)
+        true
+      rescue ClosedQueueError
+        false
+      end
     end
     
     def receive_req
@@ -210,11 +256,13 @@ module ConcurrentWorker
     end
 
     def wait_cncr_proc
+      $stdout.flush
       begin
         Process.waitpid(@c_pid)
       rescue Errno::ECHILD
       end
       @thread && @thread.join
+      $stdout.flush
     end
   end
 
@@ -231,24 +279,54 @@ module ConcurrentWorker
         @set_blocks.push([:work_block, work_block])
       end
       
+      @array_mutex = Mutex.new
       @ready_queue = Queue.new
       
-      @callbacks = []
+      @result_callbacks = []
       @callback_queue = Queue.new
       @callback_thread = Thread.new do
-        finished_count = 0
         loop do
           break if (result = @callback_queue.pop).empty?
-          @callbacks.each do |callback|
+          @result_callbacks.each do |callback|
             callback.call(result[0])
           end
         end
       end
     end
     
+    def push( arg )
+      @array_mutex.synchronize do
+        super( arg )
+      end
+    end
+    
+    def shift
+      @array_mutex.synchronize do
+        super
+      end
+    end
+    
+    def size
+      @array_mutex.synchronize do
+        super
+      end
+    end
+    
+    def n_available
+      @array_mutex.synchronize do
+        super
+      end
+    end
+    
+    def empty?
+      @array_mutex.synchronize do
+        super
+      end
+    end
+    
     def add_callback(&callback)
       raise "block is nil" unless callback
-      @callbacks.push(callback)
+      @result_callbacks.push(callback)
     end
 
 
@@ -258,11 +336,30 @@ module ConcurrentWorker
         @callback_queue.push([arg])
         @ready_queue.push(w)
       end
+
+      if @options[:respawn]
+        w.add_retired_callback do
+          undone_reqs = []
+          while req = w.req_queue.pop
+            next if req == []
+            undone_reqs.push req
+          end
+          
+          unless undone_reqs.empty?
+            new_w = deploy_worker
+            undone_reqs.each do |req|
+              new_w.req( *req[0], &req[1] )
+            end
+            self.delete w
+          end
+        end
+      end
+      
       @set_blocks.each do |symbol, block|
         w.set_block(symbol, &block)
       end
       w.run
-      push w
+      self.push w
       w
     end
 
@@ -272,18 +369,20 @@ module ConcurrentWorker
     
     def req(*args, &work_block)
       if self.size < @max_num && select{ |w| w.req_queue.size == 0 }.empty?
-        w =  deploy_worker
+        w = deploy_worker
         w.req_queue_max.times do
           @ready_queue.push(w)
         end
       end
-      w = @ready_queue.pop
-      w.req(*args, &work_block)
+      
+      while !@ready_queue.pop.req(*args, &work_block)
+      end
     end
 
     def join
-      self.map(&:quit)
-      self.map(&:join)
+      puts size
+      self.shift.join until self.empty?
+      puts size
       @callback_queue.push([])
       @callback_thread.join
     end

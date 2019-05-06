@@ -1,6 +1,6 @@
 # ConcurrentWorker
 
-Concurrent worker in thread/process with preparation structure.
+Concurrent worker in thread/process with preparation mechanism.
 
 ## Installation
 
@@ -54,7 +54,7 @@ end
 
 # define base block for some preparation of work block.
 logger.set_block(:base_block) do
-  open( "log.txt" , "w" ) do |file|
+  open("log.txt", "w") do |file|
     @file = file
     # 'yield_loop_block' must be called in base block.
     # work block will be called in this call.
@@ -72,12 +72,12 @@ You can exec work block in some process concurrently.
 ```ruby
 #define a pool of 8 workers , executed in other process.
 wp = ConcurrentWorker::WorkerPool.new(type: :process, pool_max: 8) do |n|
-  [n , n.times.inject(:+)]
+  [n, n.times.inject(:+)]
 end
 
 # you can receive the result of work block with callback block.
 wp.add_callback do |n, result|
-  logger.log( "n=%d,result=%d", n, result)
+  logger.req("n=%d,result=%d", n, result)
 end
 
 (10000000..10000200).each do |n|
