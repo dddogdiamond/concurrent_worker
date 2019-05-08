@@ -22,7 +22,7 @@ Or install it yourself as:
 
 ### Worker
 
-You can define worker block executed in other thread, and send requests to the worker.
+You can define a worker setting a work block executed in other thread, and send requests to the worker.
 
 ```ruby
 require 'concurrent_worker'
@@ -42,11 +42,11 @@ logger.req("thread%d n=%d\n",0, 1)
 logger.join
 ```
 
-If you need some preparation for the worker block, you can define 'base block'.
+If you need some preparation for the work block, you can define 'base block'.
 
 ```ruby
 logger = ConcurrentWorker::Worker.new do |args|
-  # worker block and base block can share object with instance variable(@xxx).
+  # work block and base block can share object with instance variable(@xxx).
   printf(@file, *args)
   @file.flush
   nil
@@ -70,7 +70,7 @@ The work block and base block are executed in a same thread, and in a worker's i
 You can exec work block in some process concurrently.
 
 ```ruby
-#define a pool of 8 workers , executed in other process.
+#define a pool of 8 workers with same work block, executed in other process.
 wp = ConcurrentWorker::WorkerPool.new(type: :process, pool_max: 8) do |n|
   [n, n.times.inject(:+)]
 end
