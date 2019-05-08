@@ -188,10 +188,14 @@ module ConcurrentWorker
       end
 
       def recv
-        szdata = @rio.read(4)
-        return [] if szdata.nil?
-        size = szdata.unpack("I")[0]
-        Marshal.load(@rio.read(size))
+        begin
+          szdata = @rio.read(4)
+          return [] if szdata.nil?
+          size = szdata.unpack("I")[0]
+          Marshal.load(@rio.read(size))
+        rescue IOError
+          raise StopIteration
+        end
       end
       
       def close
@@ -210,7 +214,6 @@ module ConcurrentWorker
           @ipc_channel.send($!)
         ensure
           @ipc_channel.send(:worker_loop_finished)
-          @ipc_channel.close
         end
       end
       @ipc_channel.choose_io
@@ -225,6 +228,9 @@ module ConcurrentWorker
             call_result_callbacks(result)
             @req_queue.pop
           end
+        rescue
+          Thread.pass
+          raise $!
         ensure
           @ipc_channel.close
           @req_queue.close
@@ -255,13 +261,11 @@ module ConcurrentWorker
     end
 
     def wait_cncr_proc
-      $stdout.flush
       begin
         Process.waitpid(@c_pid)
       rescue Errno::ECHILD
       end
       @thread && @thread.join
-      $stdout.flush
     end
   end
 
@@ -277,7 +281,7 @@ module ConcurrentWorker
       if work_block
         @set_blocks.push([:work_block, work_block])
       end
-      
+
       @array_mutex = Mutex.new
       @ready_queue = Queue.new
       
@@ -289,21 +293,34 @@ module ConcurrentWorker
           @result_callbacks.each do |callback|
             callback.call(result[0])
           end
+          @count_queue.pop
+          if @count_queue.empty?
+            @finished_queue.push([])
+          end
         end
       end
+      @req_queue_max = @options[:req_queue_max]||2
 
-      @req_queue = SizedQueue.new(@max_num * 2)
+#      @req_queue = SizedQueue.new(@max_num * @req_queue_max)
+      @req_queue = Queue.new
+      @count_queue = Queue.new
+      @finished_queue = Queue.new
       @req_thread = Thread.new do
         loop do
           break if (req = @req_queue.pop).empty?
-          if need_new_worker?
-            w = deploy_worker
-            w.req_queue_max.times do
-              @ready_queue.push(w)
+          
+          w = nil
+          loop do
+            if need_new_worker?
+              nw = deploy_worker
+              nw.req_queue_max.times do
+                @ready_queue.push(nw)
+              end
             end
+            break if (w = @ready_queue.pop).kind_of?(Array)
+            break if w.req(*req[0], &req[1])
           end
-          while !@ready_queue.pop.req(*req[0], &req[1])
-          end
+          break if w.kind_of?(Array)
         end
       end
     end
@@ -347,18 +364,22 @@ module ConcurrentWorker
     
 
     def deploy_worker
-      w = Worker.new(*@args, type: @options[:type], &@work_block)
+      w = Worker.new(*@args, type: @options[:type], req_queue_max: @req_queue_max, &@work_block)
       w.add_callback do |arg|
         @callback_queue.push([arg])
         @ready_queue.push(w)
       end
 
       w.add_retired_callback do
-        while req = w.req_queue.pop
+        n_undone_reqs = 0
+        until w.req_queue.empty?
+          req = w.req_queue.pop
           next if req == []
+          n_undone_reqs += 1
           @req_queue.push(req)
         end
         self.delete(w)
+        @ready_queue.push(w)
       end
       
       @set_blocks.each do |symbol, block|
@@ -374,13 +395,15 @@ module ConcurrentWorker
     end
     
     def req(*args, &work_block)
+      @count_queue.push(true)
       @req_queue.push([args, work_block])
     end
 
     def join
-      puts size
+      while r = @finished_queue.pop
+        break if @count_queue.empty?
+      end
       self.shift.join until self.empty?
-      puts size
       @callback_queue.push([])
       @callback_thread.join
       @req_queue.push([])
