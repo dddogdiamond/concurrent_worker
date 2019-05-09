@@ -368,7 +368,7 @@ class CallbackParamTest < Minitest::Test
     assert_equal [@type,3],[@type,result] # can't be [3,5]
   end
 
-  def test_callback_arrayret_param
+  def test_callback_arrayarrayret_param
     #
     # callback : [arrayret] param
     #
@@ -543,7 +543,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     assert_equal [@type,3],[@type,result] # can't be [3,5]
   end
 
-  def test_callback_arrayret_param
+  def test_callback_arrayarrayret_param
     #
     # callback : [arrayret] param
     #
