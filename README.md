@@ -29,7 +29,7 @@ require 'concurrent_worker'
 Thread.abort_on_exception = true
 
 # define a work block.
-logger = ConcurrentWorker::Worker.new do |args|
+logger = ConcurrentWorker::Worker.new do |*args|
   printf(*args)
   $stdout.flush
   nil
@@ -45,7 +45,7 @@ logger.join
 If you need some preparation for the work block, you can define 'base block'.
 
 ```ruby
-logger = ConcurrentWorker::Worker.new do |args|
+logger = ConcurrentWorker::Worker.new do |*args|
   # work block and base block can share object with instance variable(@xxx).
   printf(@file, *args)
   @file.flush

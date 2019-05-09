@@ -3,6 +3,7 @@ require "concurrent_worker/version"
 module ConcurrentWorker
   class Error < StandardError; end
 
+  require 'thread'
 
   class RequestCounter
     def initialize
@@ -13,14 +14,16 @@ module ConcurrentWorker
       @count.push(args)
     end
     def pop
-      @count.pop
-      @com.push([])
+      Thread.handle_interrupt(Object => :never) do
+        @count.pop
+        @com.push(true)
+      end
     end
     
-    def wait(n)
-      return if @count.size <= n
+    def wait_until_less_than(n)
+      return if @count.size < n
       while @com.pop
-        break if @count.size <= n
+        break if @count.size < n
       end
     end
     def size
@@ -49,7 +52,6 @@ module ConcurrentWorker
 
   
 
-  require 'thread'
   class Worker
     attr_accessor :channel
     # Worker               : worker class
@@ -106,10 +108,13 @@ module ConcurrentWorker
       raise "block is nil" unless callback
       @result_callbacks.push(callback)
     end
+    def clear_callbacks
+      @result_callbacks.clear
+    end
     
     def call_result_callbacks(args)
       @result_callbacks.each do |callback|
-        callback.call(args)
+        callback.call(*args)
       end
       @req_counter.pop
     end
@@ -117,6 +122,9 @@ module ConcurrentWorker
     def add_retired_callback(&callback)
       raise "block is nil" unless callback
       @retired_callbacks.push(callback)
+    end
+    def clear_retired_callbacks
+      @retired_callbacks.clear
     end
     
     def call_retired_callbacks
@@ -155,7 +163,7 @@ module ConcurrentWorker
           if work_block
             set_block(:work_block, &work_block)
           end
-          send_res(yield_work_block(args))
+          send_res(yield_work_block(*args))
         end
       end
     end
@@ -168,8 +176,8 @@ module ConcurrentWorker
     
     def run
       @state = :run
-      set_default_loop_block unless @loop_block
-      set_default_base_block unless @base_block
+      set_default_loop_block unless defined?(@loop_block) && @loop_block
+      set_default_base_block unless defined?(@base_block) && @base_block
       cncr_block
     end
     
@@ -177,7 +185,7 @@ module ConcurrentWorker
       unless @state == :run
         run
       end
-      @req_counter.wait(@snd_queue_max)
+      @req_counter.wait_until_less_than(@snd_queue_max)
       begin 
         @req_counter.push([args, work_block])
         send_req([args, work_block])
@@ -189,7 +197,6 @@ module ConcurrentWorker
     
     def quit
       begin 
-        @req_counter.push([])
         send_req([])
         true
       rescue ClosedQueueError, IOError
@@ -198,7 +205,7 @@ module ConcurrentWorker
     end
     
     def join
-      @req_counter.wait(0)
+      @req_counter.wait_until_less_than(1)
       quit
       wait_cncr_proc
     end
@@ -368,7 +375,7 @@ module ConcurrentWorker
         loop do
           break if (result = @rcv_queue.pop).empty?
           @result_callbacks.each do |callback|
-            callback.call(result[0])
+            callback.call(*result[0])
           end
           @req_counter.pop
         end
@@ -411,8 +418,9 @@ module ConcurrentWorker
     
 
     def deploy_worker
+      defined?(@work_block) || @work_block = nil 
       w = Worker.new(*@args, type: @options[:type], snd_queue_max: @snd_queue_max, &@work_block)
-      w.add_callback do |arg|
+      w.add_callback do |*arg|
         @rcv_queue.push([arg])
         @ready_queue.push(w)
       end
@@ -438,13 +446,13 @@ module ConcurrentWorker
     end
     
     def req(*args, &work_block)
-      @req_counter.wait(@max_num * @snd_queue_max)
+      @req_counter.wait_until_less_than(@max_num * @snd_queue_max)
       @req_counter.push(true)
       @snd_queue.push([args, work_block])
     end
 
     def join
-      @req_counter.wait(0)
+      @req_counter.wait_until_less_than(1)
       self.shift.join until self.empty?
       @rcv_queue.push([])
       @rcv_thread.join
