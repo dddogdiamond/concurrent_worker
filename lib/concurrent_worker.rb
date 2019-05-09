@@ -375,7 +375,7 @@ module ConcurrentWorker
         loop do
           break if (result = @rcv_queue.pop).empty?
           @result_callbacks.each do |callback|
-            callback.call(*result[0])
+            callback.call(*result)
           end
           @req_counter.pop
         end
@@ -421,16 +421,20 @@ module ConcurrentWorker
       defined?(@work_block) || @work_block = nil 
       w = Worker.new(*@args, type: @options[:type], snd_queue_max: @snd_queue_max, &@work_block)
       w.add_callback do |*arg|
-        @rcv_queue.push([arg])
-        @ready_queue.push(w)
+        Thread.handle_interrupt(Object => :never) do
+          @rcv_queue.push(arg)
+          @ready_queue.push(w)
+        end
       end
 
       w.add_retired_callback do
-        w.req_counter.rest.each do
-          |req|
-          @snd_queue.push(req)
+        Thread.handle_interrupt(Object => :never) do
+          w.req_counter.rest.each do
+            |req|
+            @snd_queue.push(req)
+          end
+          @ready_queue.push(w)
         end
-        @ready_queue.push(w)
       end
       
       @set_blocks.each do |symbol, block|
