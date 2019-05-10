@@ -87,6 +87,8 @@ module ConcurrentWorker
 
       @snd_queue_max = @options[:snd_queue_max] || 2
       @req_counter = RequestCounter.new
+      @options[ :result_callback_interrupt ]  ||= :immediate 
+      @options[ :retired_callback_interrupt ] ||= :immediate 
 
       case @options[:type]
       when :process
@@ -113,10 +115,14 @@ module ConcurrentWorker
     end
     
     def call_result_callbacks(args)
-      @result_callbacks.each do |callback|
-        callback.call(*args)
+      Thread.handle_interrupt(Object => :never) do        
+        Thread.handle_interrupt(Object => @options[ :result_callback_interrupt ] ) do
+          @result_callbacks.each do |callback|
+            callback.call(*args)
+          end
+        end
+        @req_counter.pop
       end
-      @req_counter.pop
     end
     
     def add_retired_callback(&callback)
@@ -128,8 +134,10 @@ module ConcurrentWorker
     end
     
     def call_retired_callbacks
-      @retired_callbacks.each do |callback|
-        callback.call
+      Thread.handle_interrupt(Object => @options[ :retired_callback_interrupt ] ) do
+        @retired_callbacks.each do |callback|
+          callback.call
+        end
       end
     end
     
@@ -216,12 +224,16 @@ module ConcurrentWorker
     def cncr_block
       @thread_channel = Queue.new
       @thread =  Thread.new do
-        begin
-          yield_base_block
-        ensure
-          @req_counter.close
-          @thread_channel.close
-          call_retired_callbacks
+        Thread.handle_interrupt(Object => :never) do
+          begin
+            Thread.handle_interrupt(Object => :immediate) do
+              yield_base_block
+            end
+          ensure
+            @req_counter.close
+            @thread_channel.close
+            call_retired_callbacks
+          end
         end
       end
     end
@@ -260,19 +272,23 @@ module ConcurrentWorker
       
       def send(obj)
         begin
-          data = Marshal.dump(obj)
-          @wio.write([data.size].pack("I"))
-          @wio.write(data)
+          Thread.handle_interrupt(Object => :never) do
+            data = Marshal.dump(obj)
+            @wio.write([data.size].pack("I"))
+            @wio.write(data)
+          end
         rescue Errno::EPIPE
         end
       end
 
       def recv
         begin
-          szdata = @rio.read(4)
-          return [] if szdata.nil?
-          size = szdata.unpack("I")[0]
-          Marshal.load(@rio.read(size))
+          Thread.handle_interrupt(Object => :on_blocking) do
+            szdata = @rio.read(4)
+            return [] if szdata.nil?
+            size = szdata.unpack("I")[0]
+            Marshal.load(@rio.read(size))
+          end
         rescue IOError
           raise StopIteration
         end
@@ -285,21 +301,25 @@ module ConcurrentWorker
 
     def set_rcv_thread
       Thread.new do
-        begin
-          loop do
-            result = @ipc_channel.recv
-            break if result == :worker_loop_finished
-            raise result if result.kind_of?(Exception)
+        Thread.handle_interrupt(Object => :never) do
+          begin
+            Thread.handle_interrupt(Object => :immediate) do
+              loop do
+                result = @ipc_channel.recv
+                break if result == :worker_loop_finished
+                raise result if result.kind_of?(Exception)
 
-            call_result_callbacks(result)
+                call_result_callbacks(result)
+              end
+            end
+          rescue
+            Thread.pass
+            raise $!
+          ensure
+            @req_counter.close
+            @ipc_channel.close
+            call_retired_callbacks
           end
-        rescue
-          Thread.pass
-          raise $!
-        ensure
-          @req_counter.close
-          @ipc_channel.close
-          call_retired_callbacks
         end
       end
     end
@@ -418,23 +438,25 @@ module ConcurrentWorker
     
 
     def deploy_worker
-      defined?(@work_block) || @work_block = nil 
-      w = Worker.new(*@args, type: @options[:type], snd_queue_max: @snd_queue_max, &@work_block)
+      defined?(@work_block) || @work_block = nil
+      worker_options = {
+        type:                       @options[:type],
+        snd_queue_max:              @snd_queue_max,
+        result_callback_interrupt:  :never,
+        retired_callback_interrupt: :never
+      }
+      w = Worker.new(*@args, worker_options, &@work_block)
       w.add_callback do |*arg|
-        Thread.handle_interrupt(Object => :never) do
-          @rcv_queue.push(arg)
-          @ready_queue.push(w)
-        end
+        @rcv_queue.push(arg)
+        @ready_queue.push(w)
       end
 
       w.add_retired_callback do
-        Thread.handle_interrupt(Object => :never) do
-          w.req_counter.rest.each do
-            |req|
-            @snd_queue.push(req)
-          end
-          @ready_queue.push(w)
+        w.req_counter.rest.each do
+          |req|
+          @snd_queue.push(req)
         end
+        @ready_queue.push(w)
       end
       
       @set_blocks.each do |symbol, block|
