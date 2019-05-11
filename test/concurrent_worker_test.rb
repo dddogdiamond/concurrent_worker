@@ -392,7 +392,24 @@ class CallbackParamTest < Minitest::Test
     result = nil
     @worker = ConcurrentWorker::Worker.new(type: @type) do
       array = [3,5]
-      [ array ]
+      array
+    end
+    @worker.add_callback do |*param|
+      result = param
+    end
+    @worker.req
+    @worker.join
+    assert_equal [@type,[3,5]],[@type,result]
+  end
+
+  def test_callback_arrayarrayret_astrparam
+    #
+    # callback : arrayarrayret *param
+    #
+    result = nil
+    @worker = ConcurrentWorker::Worker.new(type: @type) do
+      array = [3,5]
+      [array]
     end
     @worker.add_callback do |*param|
       result = param
@@ -401,7 +418,7 @@ class CallbackParamTest < Minitest::Test
     @worker.join
     assert_equal [@type,[[3,5]]],[@type,result]
   end
-
+  
 end
 
 
@@ -567,7 +584,24 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     result = nil
     @worker.set_block(:work_block)  do
       array = [3,5]
-      [ array ]
+      array
+    end
+    @worker.add_callback do |*param|
+      result = param
+    end
+    @worker.req
+    @worker.join
+    assert_equal [@type,[3,5]],[@type,result]
+  end
+
+  def test_callback_arrayarrayret_astrparam
+    #
+    # callback : [arrayret] *param
+    #
+    result = nil
+    @worker.set_block(:work_block)  do
+      array = [3,5]
+      [array]
     end
     @worker.add_callback do |*param|
       result = param
