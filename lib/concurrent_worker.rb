@@ -328,12 +328,16 @@ module ConcurrentWorker
       @ipc_channel = IPCDuplexChannel.new
       @c_pid = fork do
         @ipc_channel.choose_io
-        begin
-          yield_base_block
-        rescue
-          @ipc_channel.send($!)
-        ensure
-          @ipc_channel.send(:worker_loop_finished)
+        Thread.handle_interrupt(Object => :never) do
+          begin
+            Thread.handle_interrupt(Object => :immediate) do
+              yield_base_block
+            end
+          rescue
+            @ipc_channel.send($!)
+          ensure
+            @ipc_channel.send(:worker_loop_finished)
+          end
         end
       end
       @ipc_channel.choose_io
