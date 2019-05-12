@@ -2,7 +2,7 @@
 [![Build Status](https://travis-ci.org/dddogdiamond/concurrent_worker.svg?branch=master)](https://travis-ci.org/dddogdiamond/concurrent_worker)
 [![Code Climate](https://codeclimate.com/github/dddogdiamond/concurrent_worker/badges/gpa.svg)](https://codeclimate.com/github/dddogdiamond/concurrent_worker)
 [![Gem Version](https://badge.fury.io/rb/concurrent_worker.svg)](http://badge.fury.io/rb/concurrent_worker)
-[![MIT License](http://img.shields.io/github/license/dddogdiamond/concurrent_worker.svg)](LICENSE)
+[![MIT License](http://img.shields.io/github/license/dddogdiamond/concurrent_worker.svg)](LICENSE.txt)
 
 Concurrent worker in thread/process with preparation mechanism.
 
