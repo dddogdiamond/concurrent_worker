@@ -112,6 +112,53 @@ class WorkBlockParamTest < Minitest::Test
     assert_equal [@type,[[3,5]]],[@type,result]
   end
 
+  def test_workblock_nilarg_param
+    #
+    # workblock : nilarg param
+    #
+    result = nil
+    @worker.req(nil) do |param|
+      result = param
+    end
+    @worker.join
+    assert_equal [@type,nil],[@type,result]
+  end
+  
+  def test_workblock_nilarg_astrparam
+    #
+    # workblock : nilarg *param
+    #
+    result = nil
+    @worker.req(nil) do |*param|
+      result = param
+    end
+    @worker.join
+    assert_equal [@type,[nil]],[@type,result]
+  end
+  
+  def test_workblock_noarg_param
+    #
+    # workblock : noarg param
+    #
+    result = nil
+    @worker.req() do |param|
+      result = param
+    end
+    @worker.join
+    assert_equal [@type,nil],[@type,result]
+  end
+
+  def test_workblock_noarg_astrparam
+    #
+    # workblock : noarg param
+    #
+    result = nil
+    @worker.req() do |*param|
+      result = param
+    end
+    @worker.join
+    assert_equal [@type,[]],[@type,result]
+  end
 end
 
 
@@ -228,6 +275,61 @@ class SetWorkBlockParamTest < Minitest::Test
     assert_equal [@type,[[3,5]]],[@type,result]
   end
 
+
+
+  def test_workblock_nilarg_param
+    #
+    # workblock : nilarg param
+    #
+    result = nil
+    @worker.set_block(:work_block) do |param|
+      result = param
+    end
+    @worker.req(nil)
+    @worker.join
+    assert_equal [@type,nil],[@type,result]
+  end
+  
+  def test_workblock_nilarg_astrparam
+    #
+    # workblock : nilarg *param
+    #
+    result = nil
+    @worker.set_block(:work_block) do |*param|
+      result = param
+    end
+    @worker.req(nil)
+    @worker.join
+    assert_equal [@type,[nil]],[@type,result]
+  end
+  
+  def test_workblock_noarg_param
+    #
+    # workblock : noarg param
+    #
+    result = nil
+    @worker.set_block(:work_block) do |param|
+      result = param
+    end
+    @worker.req()
+    @worker.join
+    assert_equal [@type,nil],[@type,result]
+  end
+
+  def test_workblock_noarg_astrparam
+    #
+    # workblock : noarg param
+    #
+    result = nil
+    @worker.set_block(:work_block) do |*param|
+      result = param
+    end
+    @worker.req()
+    @worker.join
+    assert_equal [@type,[]],[@type,result]
+  end
+  
+
 end
 
 
@@ -265,7 +367,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,3],[@type,result]
+    assert_equal [@type,[3]],[@type,result]
   end
   
   def test_callback_2ret_2param
@@ -297,7 +399,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,3],[@type,result]
+    assert_equal [@type,[3,5]],[@type,result]
   end
   
   def test_callback_1ret_astrparam
@@ -329,7 +431,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
 
 
@@ -347,7 +449,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
 
 
@@ -365,7 +467,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,3],[@type,result] # can't be [3,5]
+    assert_equal [@type,[3,5]],[@type,result]
   end
 
   def test_callback_arrayarrayret_param
@@ -382,7 +484,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
   
   def test_callback_arrayret_astrparam
@@ -399,7 +501,7 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
 
   def test_callback_arrayarrayret_astrparam
@@ -416,9 +518,75 @@ class CallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[[3,5]]],[@type,result]
+    assert_equal [@type,[[[3,5]]]],[@type,result]
   end
   
+
+  
+
+  def test_callback_nilret_param
+    #
+    # callback : nilret param
+    #
+    result = nil
+    @worker = ConcurrentWorker::Worker.new(type: @type) do
+      nil
+    end
+    @worker.add_callback do |param|
+      result = param
+    end
+    @worker.req
+    @worker.join
+    assert_equal [@type,nil],[@type,result]
+  end
+  
+  def test_callback_nilret_astrparam
+    #
+    # callback : nilret *param
+    #
+    result = nil
+    @worker = ConcurrentWorker::Worker.new(type: @type) do
+      nil
+    end
+    @worker.add_callback do |*param|
+      result = param
+    end
+    @worker.req
+    @worker.join
+    assert_equal [@type,[nil]],[@type,result]
+  end
+  
+  def test_callback_noret_param
+    #
+    # callback : noret param
+    #
+    result = nil
+    @worker = ConcurrentWorker::Worker.new(type: @type) do
+      []
+    end
+    @worker.add_callback do |param|
+      result = param
+    end
+    @worker.req
+    @worker.join
+    assert_equal [@type,[]],[@type,result]
+  end
+
+  def test_callback_noret_astrparam
+    #
+    # callback : noret param
+    #
+    result = nil
+    @worker = ConcurrentWorker::Worker.new(type: @type) do
+      []
+    end
+    @worker.add_callback do |*param|
+      result = param
+    end
+    @worker.req
+    @worker.join
+    assert_equal [@type,[[]]],[@type,result]
+  end
 end
 
 
@@ -457,7 +625,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,3],[@type,result]
+    assert_equal [@type,[3]],[@type,result]
   end
   
   def test_callback_2ret_2param
@@ -489,7 +657,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,3],[@type,result]
+    assert_equal [@type,[3,5]],[@type,result]
   end
   
   def test_callback_1ret_astrparam
@@ -521,7 +689,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
 
 
@@ -539,7 +707,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
 
 
@@ -557,7 +725,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,3],[@type,result] # can't be [3,5]
+    assert_equal [@type,[3,5]],[@type,result] # can't be [3,5]
   end
 
   def test_callback_arrayarrayret_param
@@ -574,7 +742,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
   
   def test_callback_arrayret_astrparam
@@ -591,7 +759,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[3,5]],[@type,result]
+    assert_equal [@type,[[3,5]]],[@type,result]
   end
 
   def test_callback_arrayarrayret_astrparam
@@ -608,7 +776,7 @@ class SetWorkBlockCallbackParamTest < Minitest::Test
     end
     @worker.req
     @worker.join
-    assert_equal [@type,[[3,5]]],[@type,result]
+    assert_equal [@type,[[[3,5]]]],[@type,result]
   end
 
 end
