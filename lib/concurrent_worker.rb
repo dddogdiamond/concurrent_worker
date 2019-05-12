@@ -140,19 +140,16 @@ module ConcurrentWorker
         end
       end
     end
-    
-    def set_block(symbol, &block)
-      raise "block is nil" unless block
-      
-      unless [:base_block, :loop_block, :work_block].include?(symbol)
-        raise symbol.to_s + " is not used as worker block"
-      end
-      
+
+
+    def define_block(symbol,&block)
       worker_block = Proc.new do |*args|
         self.instance_exec(*args, &block)
       end
       instance_variable_set("@" + symbol.to_s, worker_block)
-      
+    end
+    
+    def define_block_yield(symbol)
       define_singleton_method("yield_" + symbol.to_s) do |*args|
         blk = instance_variable_get("@" + symbol.to_s)
         if blk
@@ -161,6 +158,16 @@ module ConcurrentWorker
           raise "block " + symbol.to_s + " is not defined"
         end
       end
+    end
+    
+    def set_block(symbol, &block)
+      raise "block is nil" unless block
+      
+      unless [:base_block, :loop_block, :work_block].include?(symbol)
+        raise symbol.to_s + " is not used as worker block"
+      end
+      define_block(symbol,&block)
+      define_block_yield(symbol)
     end
 
     def set_default_loop_block
@@ -379,7 +386,7 @@ module ConcurrentWorker
       self.size < @max_num && self.select{ |w| w.queue_empty? }.empty?
     end
 
-    def refresh_workers
+    def available_worker
       delete_if{ |w| w.queue_closed? }
       if need_new_worker?
         w = deploy_worker
@@ -387,15 +394,14 @@ module ConcurrentWorker
           @ready_queue.push(w)
         end
       end
+      @ready_queue.pop
     end
     
     def set_snd_thread
       Thread.new do
         while req = @snd_queue.pop
           (args, work_block) = req
-          loop do
-            refresh_workers
-            break if @ready_queue.pop.req(*args, &work_block)
+          until available_worker.req(*args, &work_block)
           end
         end
       end
