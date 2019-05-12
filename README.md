@@ -1,6 +1,5 @@
 # ConcurrentWorker
 [![Build Status](https://travis-ci.org/dddogdiamond/concurrent_worker.svg?branch=master)](https://travis-ci.org/dddogdiamond/concurrent_worker)
-
 [![Code Climate](https://codeclimate.com/github/dddogdiamond/concurrent_worker/badges/gpa.svg)](https://codeclimate.com/github/dddogdiamond/concurrent_worker)
 [![Gem Version](https://badge.fury.io/rb/concurrent_worker.svg)](http://badge.fury.io/rb/concurrent_worker)
 [![MIT License](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](LICENSE)
