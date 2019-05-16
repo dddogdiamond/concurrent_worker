@@ -18,9 +18,6 @@ module ConcurrentWorker
     def queue_empty?
       !queue_closed? && @req_counter.size == 0
     end
-    def queue_available?
-      !queue_closed? && ( @snd_queue_max == 0 || @req_counter.size < @snd_queue_max )
-    end
     
     def initialize(*args, **options, &work_block)
       @args = args

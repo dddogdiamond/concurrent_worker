@@ -87,6 +87,23 @@ module ConcurrentWorker
       raise "block is nil" unless callback
       @finished_callbacks.push(callback)
     end
+
+    def worker_pool_com_setting(w)
+      w.add_callback do |*args|
+        @recv_queue.push([args])
+        @ready_queue.push(w)
+      end
+
+      w.add_retired_callback do
+        w.undone_requests.each do |req|
+          @snd_queue.push(req)
+        end
+      end
+      
+      w.snd_queue_max.times do
+        @ready_queue.push(w)
+      end
+    end
     
 
     def deploy_worker
@@ -98,26 +115,14 @@ module ConcurrentWorker
         retired_callback_interrupt: :never
       }
       w = Worker.new(*@args, worker_options, &@work_block)
-      w.add_callback do |*args|
-        @recv_queue.push([args])
-        @ready_queue.push(w)
-      end
-
-      w.add_retired_callback do
-        w.undone_requests.each do
-          |req|
-          @snd_queue.push(req)
-        end
-      end
       
       @set_blocks.each do |symbol, block|
         w.set_block(symbol, &block)
       end
+      
+      worker_pool_com_setting(w)
       w.run
       
-      w.snd_queue_max.times do
-        @ready_queue.push(w)
-      end
       self.push(w)
       w
     end
