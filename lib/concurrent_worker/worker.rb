@@ -19,7 +19,7 @@ module ConcurrentWorker
       !queue_closed? && @req_counter.size == 0
     end
     def queue_available?
-      !queue_closed? && @req_counter.size < @snd_queue_max
+      !queue_closed? && ( @snd_queue_max == 0 || @req_counter.size < @snd_queue_max )
     end
     
     def initialize(*args, **options, &work_block)
@@ -169,7 +169,7 @@ module ConcurrentWorker
       unless @state == :run
         run
       end
-      @req_counter.wait_until_less_than(@snd_queue_max)
+      @req_counter.wait_until_less_than(@snd_queue_max) if @snd_queue_max > 0
       begin 
         @req_counter.push([args, work_block])
         send_req([args, work_block])
