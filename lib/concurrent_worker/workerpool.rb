@@ -1,18 +1,35 @@
 module ConcurrentWorker
   class WorkerPool < Array
+    class ReadyWorkerQueue < Queue
+      alias :super_push :push
+      alias :super_pop  :pop
+      def initialize
+        super()
+        @m = Mutex.new
+      end
+      def push(arg)
+        @m.synchronize do
+          super_push(arg)
+        end
+      end
+      def pop
+        @m.synchronize do
+          queued = []
+          queued.push(super_pop) until empty?
+          queued.sort_by{ |w| w.req_counter.size }.each{ |w| super_push(w) }
+        end
+        super_pop
+      end
+    end
+    
 
     def need_new_worker?
       self.size < @max_num && self.select{ |w| w.queue_empty? }.empty?
     end
 
     def available_worker
-      delete_if{ |w| w.queue_closed? }
-      if need_new_worker?
-        w = deploy_worker
-        w.snd_queue_max.times do
-          @ready_queue.push(w)
-        end
-      end
+      delete_if{ |w| w.queue_closed? && w.join }
+      deploy_worker if need_new_worker?
       @ready_queue.pop
     end
     
@@ -47,7 +64,7 @@ module ConcurrentWorker
         @set_blocks.push([:work_block, work_block])
       end
 
-      @ready_queue = Queue.new
+      @ready_queue = ReadyWorkerQueue.new
       
       @result_callbacks = []
       
@@ -87,17 +104,20 @@ module ConcurrentWorker
       end
 
       w.add_retired_callback do
-        w.req_counter.rest.each do
+        w.undone_requests.each do
           |req|
           @snd_queue.push(req)
         end
-        @ready_queue.push(w)
       end
       
       @set_blocks.each do |symbol, block|
         w.set_block(symbol, &block)
       end
       w.run
+      
+      w.snd_queue_max.times do
+        @ready_queue.push(w)
+      end
       self.push(w)
       w
     end

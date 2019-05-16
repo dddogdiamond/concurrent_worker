@@ -1,6 +1,5 @@
 module ConcurrentWorker
   class Worker
-    attr_accessor :channel
     # Worker               : worker class
     #  +cncr_block         : concurrent processing block : thread(as ConcurrentThread)/process(as ConcurrentProcess)
     #    +base_block       : user defined preparation to exec 'work block'
@@ -11,7 +10,7 @@ module ConcurrentWorker
     # so that they can share instance variables:@xxxx.
     #
 
-    attr_reader :req_counter, :snd_queue_max
+    attr_reader :req_counter, :snd_queue_max, :undone_requests
 
     def queue_closed?
       @req_counter.closed?
@@ -35,7 +34,8 @@ module ConcurrentWorker
       @snd_queue_max = @options[:snd_queue_max] || 2
       @req_counter = RequestCounter.new
       @options[:result_callback_interrupt]  ||= :immediate 
-      @options[:retired_callback_interrupt] ||= :immediate 
+      @options[:retired_callback_interrupt] ||= :immediate
+      @undone_requests = []
 
       case @options[:type]
       when :process
@@ -87,6 +87,13 @@ module ConcurrentWorker
         end
       end
     end
+    
+    def req_counter_close
+      @req_counter.close
+      until @req_counter.empty?
+        @undone_requests.push(@req_counter.pop)
+      end
+    end
 
     def result_handle_thread(&recv_block)
       Thread.new do
@@ -96,7 +103,7 @@ module ConcurrentWorker
               recv_block.call
             end
           ensure
-            @req_counter.close
+            req_counter_close
             channel_close
             call_retired_callbacks
           end
@@ -186,11 +193,12 @@ module ConcurrentWorker
     
     def join
       unless @state == :run
-        return
+        return true
       end
       @req_counter.wait_until_less_than(1)
       quit
       wait_cncr_proc
+      true
     end
   end
 

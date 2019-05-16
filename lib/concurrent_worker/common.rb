@@ -12,8 +12,9 @@ module ConcurrentWorker
     end
     def pop
       Thread.handle_interrupt(Object => :never) do
-        @count.pop
+        r = @count.pop
         @com.push(true)
+        r
       end
     end
     
@@ -23,6 +24,11 @@ module ConcurrentWorker
         break if @count.size < n
       end
     end
+
+    def empty?
+      @count.empty?
+    end
+    
     def size
       @count.size
     end
@@ -35,15 +41,6 @@ module ConcurrentWorker
       @count.closed?
     end
 
-    def rest
-      result = []
-      until @count.empty?
-        req = @count.pop
-        next if req == []
-        result.push(req)
-      end
-      result
-    end    
   end
 
   class IPCDuplexChannel
@@ -61,23 +58,14 @@ module ConcurrentWorker
     
     def send(obj)
       begin
-        Thread.handle_interrupt(Object => :never) do
-          data = Marshal.dump(obj)
-          @wio.write([data.size].pack("I"))
-          @wio.write(data)
-        end
+        Marshal.dump(obj, @wio)
       rescue Errno::EPIPE
       end
     end
 
     def recv
       begin
-        Thread.handle_interrupt(Object => :on_blocking) do
-          szdata = @rio.read(4)
-          return [] if szdata.nil?
-          size = szdata.unpack("I")[0]
-          Marshal.load(@rio.read(size))
-        end
+        Marshal.load(@rio)
       rescue IOError
         raise StopIteration
       end
