@@ -23,6 +23,10 @@ module ConcurrentWorker
     end
     
 
+    def queue_closed?
+      @req_counter.closed?
+    end
+    
     def need_new_worker?
       self.size < @max_num && self.select{ |w| w.queue_empty? }.empty?
     end
@@ -99,9 +103,15 @@ module ConcurrentWorker
           @snd_queue.push(req)
         end
       end
-      
-      w.snd_queue_max.times do
-        @ready_queue.push(w)
+
+      if w.snd_queue_max == 0
+        2.times do
+          @ready_queue.push(w)
+        end
+      else
+        w.snd_queue_max.times do
+          @ready_queue.push(w)
+        end
       end
     end
     
@@ -132,9 +142,10 @@ module ConcurrentWorker
     end
     
     def req(*args, &work_block)
-      @req_counter.wait_until_less_than(@max_num * @snd_queue_max)
+      @req_counter.wait_until_less_than(@max_num * @snd_queue_max) if @snd_queue_max > 0
       @req_counter.push(true)
       @snd_queue.push([args, work_block])
+      true
     end
 
     def join
