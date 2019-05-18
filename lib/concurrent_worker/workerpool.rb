@@ -34,7 +34,11 @@ module ConcurrentWorker
     def available_worker
       delete_if{ |w| w.queue_closed? && w.join }
       deploy_worker if need_new_worker?
-      @ready_queue.pop
+      if @snd_queue_max > 0
+        @ready_queue.pop
+      else
+        sort_by{ |w| w.req_counter.size }.first
+      end
     end
     
     def set_snd_thread
@@ -95,7 +99,7 @@ module ConcurrentWorker
     def worker_pool_com_setting(w)
       w.add_callback do |*args|
         @recv_queue.push([args])
-        @ready_queue.push(w)
+        @ready_queue.push(w) if @snd_queue_max > 0
       end
 
       w.add_retired_callback do
@@ -104,11 +108,7 @@ module ConcurrentWorker
         end
       end
 
-      if w.snd_queue_max == 0
-        2.times do
-          @ready_queue.push(w)
-        end
-      else
+      if w.snd_queue_max > 0
         w.snd_queue_max.times do
           @ready_queue.push(w)
         end
