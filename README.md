@@ -4,7 +4,7 @@
 [![Gem Version](https://badge.fury.io/rb/concurrent_worker.svg)](http://badge.fury.io/rb/concurrent_worker)
 [![MIT License](http://img.shields.io/github/license/dddogdiamond/concurrent_worker.svg)](LICENSE.txt)
 
-Concurrent worker in thread/process with preparation mechanism.
+Ruby concurrent worker in thread/process with preparation mechanism.
 
 ## Installation
 
@@ -102,7 +102,7 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/dddogdiamond/concurrent_worker.
+Bug reports and pull requests are welcome on GitHub at [https://github.com/dddogdiamond/concurrent_worker](https://github.com/dddogdiamond/concurrent_worker).
 
 ## License
 
