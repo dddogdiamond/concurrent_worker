@@ -59,7 +59,6 @@ module ConcurrentWorker
     def send(obj)
       begin
         Marshal.dump(obj, @wio)
-      rescue Errno::EPIPE
       end
     end
 
