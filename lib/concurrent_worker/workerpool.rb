@@ -77,6 +77,7 @@ module ConcurrentWorker
       @result_callbacks = []
       
       @snd_queue_max = @options[:snd_queue_max]||2
+      @req_mutex   = Mutex.new
       @req_counter = RequestCounter.new
 
       @snd_queue = Queue.new
@@ -142,10 +143,12 @@ module ConcurrentWorker
     end
     
     def req(*args, &work_block)
-      @req_counter.wait_until_less_than(@max_num * @snd_queue_max) if @snd_queue_max > 0
-      @req_counter.push(true)
-      @snd_queue.push([args, work_block])
-      true
+      @req_mutex.synchronize do
+        @req_counter.wait_until_less_than(@max_num * @snd_queue_max) if @snd_queue_max > 0
+        @req_counter.push(true)
+        @snd_queue.push([args, work_block])
+        true
+      end
     end
 
     def join

@@ -29,6 +29,7 @@ module ConcurrentWorker
       @retired_callbacks = []
 
       @snd_queue_max = @options[:snd_queue_max] || 2
+      @req_mutex   = Mutex.new
       @req_counter = RequestCounter.new
       @options[:result_callback_interrupt]  ||= :immediate 
       @options[:retired_callback_interrupt] ||= :immediate
@@ -163,16 +164,18 @@ module ConcurrentWorker
     end
     
     def req(*args, &work_block)
-      unless @state == :run
-        run
-      end
-      @req_counter.wait_until_less_than(@snd_queue_max) if @snd_queue_max > 0
-      begin 
-        @req_counter.push([args, work_block])
-        send_req([args, work_block])
-        true
-      rescue ClosedQueueError, IOError
-        false
+      @req_mutex.synchronize do
+        unless @state == :run
+          run
+        end
+        @req_counter.wait_until_less_than(@snd_queue_max) if @snd_queue_max > 0
+        begin 
+          @req_counter.push([args, work_block])
+          send_req([args, work_block])
+          true
+        rescue ClosedQueueError, IOError
+          false
+        end
       end
     end
     
