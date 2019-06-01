@@ -107,6 +107,7 @@ module ConcurrentWorker
         w.undone_requests.each do |req|
           @snd_queue.push(req)
         end
+        @ready_queue.push(w) if @snd_queue_max > 0
       end
 
       if w.snd_queue_max > 0
