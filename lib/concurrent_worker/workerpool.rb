@@ -16,7 +16,7 @@ module ConcurrentWorker
         @m.synchronize do
           queued = []
           queued.push(super_pop) until empty?
-          queued.sort_by{ |w| w.req_counter.size }.each{ |w| !w.queue_closed? && super_push(w) }
+          queued.sort_by{ |w| w.req_counter.size }.each{ |w| super_push(w) }
         end
         super_pop
       end
