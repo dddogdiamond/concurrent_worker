@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    concurrent_worker (0.4.8)
+    concurrent_worker (0.4.9)
 
 GEM
   remote: https://rubygems.org/
