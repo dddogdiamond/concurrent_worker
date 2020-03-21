@@ -25,8 +25,7 @@ Or install it yourself as:
 ## Usage
 
 ### Worker
-
-You can define a worker setting a work block executed in other thread, and send requests to the worker.
+A worker has a work block wchich will be executed in other thread. You can define a worker with a work block and send requests to the worker with 'req' method.
 
 ```ruby
 require 'concurrent_worker'
@@ -68,7 +67,7 @@ end
 ...
 ```
 
-The work block and base block are executed in a same thread, and in a worker's instance scope so that they can share object with the worker's instance variable.
+The work block and base block are executed in a same thread, and in a worker's instance scope so that they can share object by the worker's instance variable.
 
 ### WorkerPool
 You can exec work block in some process concurrently.
